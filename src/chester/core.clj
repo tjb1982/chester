@@ -13,16 +13,22 @@
   (fn [& [filters
           {:keys [order
                   per-page
+                  offset
                   page
                   direction]
            :or {page "1"
-                per-page "50"}
+                per-page "50"
+                offset "0"}
            :as params}]]
     (let [page (as-int page)
           page (if (pos? page)
                  page 1)
           per-page (as-int per-page)
-          offset (* (dec page) per-page)
+          offset (as-int offset)
+          qoffset (+ offset
+                     (* (dec page) per-page))
+          limit (let [limit (- per-page offset)]
+                  (if (neg? limit) 0 limit))
           results
           (handler relation
                    :filters filters
@@ -41,8 +47,10 @@
        :previous previous
        :last last*
        :count total
+       :length (-> results first count)
        :per-page per-page
        :current page
+       :offset offset
        :order order
        :direction direction
        :results (first results)})))
@@ -101,35 +109,39 @@
     (into {} (remove nil? params))))
 
 (defn resource-uri
-  [scheme host & [endpoint]]
-  (str (name scheme)
+  [request & [endpoint]]
+  (str (or (-> request :headers (get "x-original-protocol"))
+           (-> request :scheme name))
        "://"
-       host
+       (or (-> request :headers (get "x-original-host"))
+           (-> request :headers (get "host")))
        endpoint))
+
 
 (defn related-resources
   [resource controller request]
   (let [related (:related-resources controller)
         ind-href (:individual-href controller)
+        process-key
+        (fn [k]
+          (if (sequential? k)
+            (->> ((first k) resource)
+                 (map #(format (second k) (url-encode (str %))))
+                 (clojure.string/join (nth k 2)))
+            (url-encode (str (k resource)))))
         format-fun
         (fn [fks]
           (apply format
                  (flatten
                    [(first fks)
-                    (map #(url-encode (or (% resource) "")) (drop 1 fks))])))]
+                    (map process-key (drop 1 fks))])))]
     (assoc resource
       :href (when ind-href
-              (resource-uri (-> request :scheme name)
-                            (-> request :headers (get "host"))
-                            (format-fun ind-href)))
+              (resource-uri request (format-fun ind-href)))
       :related-resources
       (into {}
         (for [[relation fks] related]
-          [relation
-           (resource-uri
-             (-> request :scheme name)
-             (-> request :headers (get "host"))
-             (format-fun fks))])))))
+          [relation (resource-uri request (format-fun fks))])))))
  
 (defn do-post
   [request controller insert! body]
