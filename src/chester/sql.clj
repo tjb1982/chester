@@ -7,7 +7,11 @@
   ;; where this=? and (this=? or this=?) and ...
   ;; bindings
   (let [pairs (for [[k v] params]
-                (if (coll? v)
+                (cond
+                  (nil? v)
+                  [(format "%s is null" (name k))]
+
+                  (coll? v)
                   [(format
                      "(%s)"
                      (clojure.string/join
@@ -15,10 +19,12 @@
                        (for [vv v]
                          (format "%s=?" (name k)))))
                    v]
+
+                  :else
                   [(format "%s=?" (name k)) v]))]
     [(when-not (empty? pairs)
        (clojure.string/join " and " (map first pairs)))
-     (flatten (map second pairs))]))
+     (->> pairs (map second) flatten (remove nil?))]))
 
 (defn query-string
   [relation count? & [where order direction limit offset]]

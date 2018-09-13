@@ -5,13 +5,15 @@
             [ring.middleware.defaults :refer [wrap-defaults
                                               site-defaults
                                               api-defaults]]
-            [chester.core :refer :all]))
+            [chester.core :refer :all]
+            [chester.sql :as sql]))
 
 (def controller
   {"Foo"
    {:context "/foos"
-    :relation "foo"
+    :relation :foo
     :individual-href ["localhost/foos/%s" :id]
+    :related-resources {:lalala ["lalala/?bar=%s" :bar]}
     :routes [{:path "/"
               :methods #{:get :post}
               :collection? true}
@@ -32,7 +34,7 @@
 
 (def dbfns
   {:collect (fn [& _] [[] {:count 0}])
-   :one (fn [& _] {:foo "bar"})
+   :one (fn [& _] {:foo "bar" :id 135 :username "bar"})
    :insert! (fn [& _] {:username "test" :id "abc123"})
    :update! (fn [& _])
    :delete! (fn [& _])})
@@ -61,3 +63,22 @@
             (gen [{:username "lala"} {:username "lalalala"}]))
         result :body count (= 2) is))
     ))
+
+(deftest test-related-resources
+  (testing "related-resources"
+    (let [result (related-resources {:id 1 :username "x" :bar 1}
+                                    (get controller "Foo")
+                                    (req :get "/foos/"))]
+      (-> result :related-resources :lalala (= "http://localhostlalala/?bar=1") is))
+    (let [result (related-resources {:blah nil :id 1}
+                                    (get controller "Foo")
+                                    (req :get "/foos/"))]
+      (-> result :related-resources empty? is))
+    ))
+
+(deftest test-sql
+  (testing "sql string with null"
+    (let [result (sql/filters-to-where {:foo nil :bar 1})]
+      (-> result first (= "foo is null and bar=?") is)
+      (-> result second (= '(1)) is))))
+

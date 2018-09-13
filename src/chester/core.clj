@@ -131,17 +131,20 @@
             (url-encode (str (k resource)))))
         format-fun
         (fn [fks]
-          (apply format
-                 (flatten
-                   [(first fks)
-                    (map process-key (drop 1 fks))])))]
+          (let [values (->> fks
+                            (drop 1)
+                            (map process-key)
+                            #_(remove clojure.string/blank?))]
+            (when-not (some #(clojure.string/blank? %) values)
+              (apply format (flatten [(first fks) values])))))]
     (assoc resource
-      :href (when ind-href
+      :href (when-let [href (format-fun ind-href)]
               (resource-uri request (format-fun ind-href)))
       :related-resources
       (into {}
         (for [[relation fks] related]
-          [relation (resource-uri request (format-fun fks))])))))
+          (when-let [endpoint (format-fun fks)]
+            [relation (resource-uri request (format-fun fks))]))))))
  
 (defn do-post
   [request controller insert! body]
@@ -243,21 +246,20 @@
       (context (:context controller) request
         (let [params (:params request)
               body (:body request)]
-          (->>
-            (for [route* (:routes controller)
-                  method (:methods route*)]
-              (method-handlers
-                request
-                controller
-                route*
-                method
-                params
-                body
-                (data-access-fns
-                  (:relation controller)
-                  dbfns)))
-            flatten
-            (apply routes)))))))
+          (->> (for [route* (:routes controller)
+                     method (:methods route*)]
+                 (method-handlers
+                   request
+                   controller
+                   route*
+                   method
+                   params
+                   body
+                   (data-access-fns
+                     (:relation controller)
+                     dbfns)))
+               flatten
+               (apply routes)))))))
 
 (defn -main []
   (println "ok"))
