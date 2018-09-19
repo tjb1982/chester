@@ -12,12 +12,10 @@
                   [(format "%s is null" (name k))]
 
                   (coll? v)
-                  [(format
-                     "(%s)"
-                     (clojure.string/join
-                       " or "
-                       (for [vv v]
-                         (format "%s=?" (name k)))))
+                  [(format "%s in (%s)"
+                           (name k)
+                           (clojure.string/join
+                             ", " (map (constantly "?") v)))
                    v]
 
                   :else
